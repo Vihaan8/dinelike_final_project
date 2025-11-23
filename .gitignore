@@ -53,10 +53,6 @@ htmlcov/
 .coverage
 *.cover
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
 # Docker
 docker-compose.override.yml
 
