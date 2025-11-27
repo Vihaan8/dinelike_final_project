@@ -1,0 +1,234 @@
+/* Quiz Container */
+.quiz-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #F5EFE6 0%, #E8DCC8 100%);
+  padding: 2rem;
+}
+
+.quiz-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.quiz-header h1 {
+  font-size: 2.5rem;
+  color: #6B4423;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.quiz-header p {
+  font-size: 1.1rem;
+  color: #8B6F47;
+}
+
+/* Progress Bar */
+.progress-bar {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 3rem;
+  height: 8px;
+  background: #D4C5B9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6B4423 0%, #8B6F47 100%);
+  transition: width 0.3s ease;
+  border-radius: 10px;
+}
+
+/* Question Container */
+.question-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.question-title {
+  font-size: 2rem;
+  color: #6B4423;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.question-subtitle {
+  text-align: center;
+  font-size: 1.1rem;
+  color: #8B6F47;
+  margin-bottom: 2rem;
+}
+
+/* Options Grid */
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.options-grid-large {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem;
+  margin-bottom: 3rem;
+}
+
+/* Option Cards */
+.option-card {
+  position: relative;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 3px solid transparent;
+  box-shadow: 0 4px 12px rgba(107, 68, 35, 0.1);
+}
+
+.option-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(107, 68, 35, 0.2);
+}
+
+.option-card.selected {
+  border-color: #6B4423;
+  box-shadow: 0 8px 24px rgba(107, 68, 35, 0.3);
+}
+
+.option-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+}
+
+.option-label {
+  display: block;
+  padding: 1rem;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #4A2F1A;
+  background: white;
+}
+
+.option-card.selected .option-label {
+  background: #F5EFE6;
+  color: #6B4423;
+}
+
+/* Navigation Buttons */
+.navigation-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 3rem;
+}
+
+.btn-back, .btn-next, .btn-submit {
+  padding: 1rem 3rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-back {
+  background: #E8DCC8;
+  color: #6B4423;
+}
+
+.btn-back:hover {
+  background: #D4C5B9;
+}
+
+.btn-next, .btn-submit {
+  background: #6B4423;
+  color: white;
+  min-width: 200px;
+}
+
+.btn-next:hover:not(:disabled), .btn-submit:hover:not(:disabled) {
+  background: #8B6F47;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(107, 68, 35, 0.3);
+}
+
+.btn-next:disabled, .btn-submit:disabled {
+  background: #D4C5B9;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* Name Input Screen */
+.name-input-screen {
+  max-width: 600px;
+  margin: 5rem auto;
+  text-align: center;
+  background: white;
+  padding: 3rem;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(107, 68, 35, 0.15);
+}
+
+.name-input-screen h1 {
+  font-size: 2rem;
+  color: #6B4423;
+  margin-bottom: 1rem;
+}
+
+.name-input-screen p {
+  font-size: 1.1rem;
+  color: #8B6F47;
+  margin-bottom: 2rem;
+}
+
+.name-input-box {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.2rem;
+  border: 3px solid #D4C5B9;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  transition: border-color 0.3s ease;
+  background: #F5EFE6;
+  color: #4A2F1A;
+}
+
+.name-input-box:focus {
+  outline: none;
+  border-color: #6B4423;
+}
+
+.name-input-box::placeholder {
+  color: #A89680;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .quiz-header h1 {
+    font-size: 2rem;
+  }
+  
+  .question-title {
+    font-size: 1.5rem;
+  }
+  
+  .options-grid, .options-grid-large {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .navigation-buttons {
+    flex-direction: column;
+  }
+  
+  .btn-back, .btn-next, .btn-submit {
+    width: 100%;
+  }
+}
