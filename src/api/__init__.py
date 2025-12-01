@@ -1,0 +1,3 @@
+"""
+DineLike FastAPI Application
+"""
