@@ -57,7 +57,7 @@ const Quiz = () => {
     },
     {
       id: 'cuisines',
-      title: 'Pick your favorite cuisines!',
+      title: 'Pick your favorite cuisines',
       subtitle: 'Select up to 4',
       max: 4,
       options: [
