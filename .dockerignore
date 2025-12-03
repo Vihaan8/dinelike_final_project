@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (we'll mount volumes, not copy)
+data/photos/yelp_photos/
+data/chunks/
+data/checkpoints/
+data/santa_barbara/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+documentation/
+figma/
+*.zip
+
+# Backup
+*_BACKUP_*/
