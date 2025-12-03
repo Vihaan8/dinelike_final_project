@@ -17,7 +17,7 @@
 
 ---
 
-## What is This?
+## Problem Statement
 
 DineLike solves a simple problem: **finding restaurants that match YOUR taste is hard.**
 
@@ -39,17 +39,12 @@ Think of it like having a foodie friend who knows exactly what you like - except
 - [Project Structure](#project-structure)
 - [What We Built](#what-we-built)
 - [Quick Start](#quick-start)
-- [Data Architecture: The Complete Journey](#data-architecture-the-complete-journey)
-  - [Phase 1: Raw Data Collection](#phase-1-raw-data-collection)
-  - [Phase 2: Data Filtering & Transformation](#phase-2-data-filtering--transformation)
-  - [Phase 3: Cloud Storage & Processing](#phase-3-cloud-storage--processing)
-  - [Phase 4: LLM Tagging System](#phase-4-llm-tagging-system)
-  - [Phase 5: Data Warehouse](#phase-5-data-warehouse)
+- [Data Architecture](#data-architecture)
 - [The Matching Algorithm](#the-matching-algorithm)
-- [Complete User Journey](#complete-user-journey)
 - [System Architecture](#system-architecture)
 - [Testing & CI/CD](#testing--cicd)
-- [Undercurrents of Data Engineering](#undercurrents-of-data-engineering)
+- [Complete User Journey](#complete-user-journey)
+- [Data Engineering Undercurrents](#data-engineering-undercurrents)
 - [Team Contributions](#team-contributions)
 
 ---
@@ -116,42 +111,95 @@ final_project/
 ## What We Built
 
 ### High-Level System Overview
+
+**How DineLike Works: From Raw Data to Personalized Recommendations**
+
 ```mermaid
-graph TD
-    A[User Takes Quiz] --> B[Matching System]
-    B --> C[Taste Twin Found]
-    C --> D[Get Recommendations]
+graph LR
+    subgraph "1. DATA COLLECTION"
+        A[Yelp Dataset<br/>6.9M reviews<br/>150K businesses<br/>1.9M users]
+    end
     
-    E[Yelp Dataset<br/>6.9M reviews] --> F[Data Processing]
-    F --> G[10K reviewers<br/>tagged & analyzed]
-    G --> B
+    subgraph "2. DATA LAKE - AWS S3"
+        B[S3: dinelike-raw<br/>10GB JSON files<br/>Raw unprocessed data]
+        C[Lambda: process_raw_data<br/>Polars filtering<br/>Geographic + Quality filters]
+        D[S3: dinelike-processed<br/>111MB Parquet files<br/>10K reviewers, 42K reviews]
+    end
     
-    style A fill:#e1f5ff
-    style C fill:#d4edda
-    style E fill:#dfe6e9
-    style G fill:#ffeaa7
+    subgraph "3. LLM ANALYSIS"
+        E1[Lambda: llm_tagger<br/>Reads all reviews per user<br/>Sends to OpenAI GPT-4]
+        
+        E2[LLM condenses into 6 tags<br/>cuisines, priorities, dining_style<br/>meal_timing, adventure, price]
+        
+        E3[Repeat for all 10K users<br/>Store as JSONB in database]
+    end
+    
+    subgraph "4. DATA WAREHOUSE"
+        G[(PostgreSQL<br/>10,263 reviewers with JSONB tags<br/>42,687 reviews<br/>3,829 restaurants)]
+    end
+    
+    subgraph "5. USER APPLICATION"
+        H[User Takes Quiz<br/>Same 6 questions<br/>Creates matching JSONB structure]
+        I[Matching Algorithm<br/>Compare user JSONB vs 10K reviewer JSONBs<br/>Find best match mathematically]
+        J[React Frontend<br/>Display Twin + Restaurants + Community]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> E1
+    E1 --> E2
+    E2 --> E3
+    E3 --> G
+    
+    H --> I
+    G --> I
+    I --> J
+    
+    style A fill:#E3F2FD,stroke:#90CAF9,stroke-width:2px
+    style B fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
+    style C fill:#FFCCBC,stroke:#FFAB91,stroke-width:2px
+    style D fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
+    style E1 fill:#E1BEE7,stroke:#CE93D8,stroke-width:2px
+    style E2 fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
+    style E3 fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style G fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style H fill:#BBDEFB,stroke:#90CAF9,stroke-width:2px
+    style I fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
+    style J fill:#DCEDC8,stroke:#C5E1A5,stroke-width:2px
 ```
 
-**In Simple Terms:**
+**Understanding the Flow:**
 
-1. **Data Layer**: We started with millions of Yelp reviews, filtered them down to Santa Barbara, analyzed reviewer patterns, and stored everything efficiently
-2. **Matching Layer**: When you take the quiz, we compare your preferences against 10,000+ pre-analyzed reviewers
-3. **Recommendation Layer**: We show you restaurants your "Taste Twin" loves, with their actual reviews
+**Layer 1: Data Collection** - Start with Yelp's massive public dataset (6.9M reviews, 150K businesses, 1.9M users)
 
-### What Makes This Production-Ready?
+**Layer 2: Data Lake (AWS S3 + Lambda)** - Filter data by geography (Santa Barbara only) and quality (reviewers with 150+ reviews), reducing dataset from 10GB to 111MB of high-quality data stored in dual S3 buckets
 
-| Component | What It Does | Why It Matters |
-|-----------|--------------|----------------|
-| **Data Lake (S3)** | Stores raw and processed data | Cheap, scalable storage for big datasets |
-| **Data Warehouse (PostgreSQL)** | Fast queries for app | Sub-100ms response times |
-| **Event Streaming (Kafka)** | Handles quiz submissions | Never drops requests, scales easily |
-| **Containerization (Docker)** | One-command deployment | Works on your laptop = works in production |
-| **CI/CD (GitHub Actions)** | Automated testing | Catch bugs before they reach users |
-| **Orchestration (Airflow)** | Daily batch jobs | Automated maintenance tasks |
+**Layer 3: LLM Analysis** - Use OpenAI GPT-4 to read each reviewer's 150+ text reviews and condense them into 6 structured preference tags (cuisines, priorities, dining_style, meal_timing, adventure_level, price_sensitivity), stored as JSONB for fast comparison
+
+**Layer 4: Data Warehouse** - Load tagged profiles into PostgreSQL for instant queries (<100ms response time)
+
+**Layer 5: User Application** - Users take the same 6-question quiz, creating a matching JSONB structure. The matching algorithm compares mathematically against 10K pre-tagged reviewers to find the best taste twin, then displays personalized restaurant recommendations
 
 ---
 
 ## Quick Start
+
+### Containerization with Docker
+
+DineLike uses Docker Compose to orchestrate 7 services in isolated containers, ensuring consistent behavior across development, testing, and production environments. Each service runs in its own container with defined dependencies, health checks, and restart policies.
+
+**Services Containerized:**
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| `dinelike-postgres` | postgres:15 | Database with health checks |
+| `dinelike-api` | Custom (Dockerfile.api) | FastAPI backend |
+| `dinelike-consumer` | Custom (Dockerfile.consumer) | Kafka consumer worker |
+| `dinelike-frontend` | node:20 | React development server |
+| `dinelike-kafka` | confluentinc/cp-kafka:7.5.0 | Message queue |
+| `dinelike-zookeeper` | confluentinc/cp-zookeeper:7.5.0 | Kafka coordination |
+| `dinelike-airflow` | apache/airflow:2.7.3 | Batch orchestration (optional) |
 
 ### One-Command Deployment
 ```bash
@@ -159,7 +207,7 @@ graph TD
 git clone https://github.com/Vihaan8/final_project.git
 cd final_project
 
-# 2. Start everything (this is literally it)
+# 2. Start everything 
 docker-compose up -d
 
 # 3. Wait ~60 seconds for data to load, then open:
@@ -169,6 +217,7 @@ docker-compose up -d
 ```
 
 **What Just Happened:**
+
 - PostgreSQL started and loaded 111MB of data (10,263 reviewers, 3,829 restaurants, 42,687 reviews)
 - Kafka message queue started for real-time processing
 - FastAPI backend launched (handles quiz submissions)
@@ -188,15 +237,15 @@ docker-compose down -v    # Stop and delete data
 ```
 
 **Requirements:**
+
 - Docker Desktop
 - 8GB RAM
 - 5GB disk space
 
 ---
 
-## Data Architecture: The Complete Journey
+## Data Architecture
 
-This is where we explain HOW we turned 6.9 million Yelp reviews into a fast, queryable database that powers personalized recommendations. Every decision we made had a reason - let's walk through it chronologically.
 
 ### Phase 1: Raw Data Collection
 
@@ -222,7 +271,6 @@ Total Size: ~10GB in JSON format
 - Handles multi-GB datasets efficiently
 - Lazy evaluation (only processes what you need)
 - 10x faster than Pandas for our filtering operations
-- Benchmarked it ourselves - saved hours of processing time
 
 **Filtering Strategy:**
 ```mermaid
@@ -231,10 +279,10 @@ graph LR
     B --> C[Filter 2:<br/>Quality reviewers<br/>150+ reviews]
     C --> D[Final Dataset:<br/>42K reviews<br/>3.8K restaurants<br/>10K reviewers]
     
-    style A fill:#ff7675
-    style B fill:#fdcb6e
-    style C fill:#74b9ff
-    style D fill:#00b894
+    style A fill:#ff7675,stroke:#d63031,stroke-width:2px
+    style B fill:#fdcb6e,stroke:#f39c12,stroke-width:2px
+    style C fill:#74b9ff,stroke:#0984e3,stroke-width:2px
+    style D fill:#00b894,stroke:#00a884,stroke-width:2px
 ```
 
 **Filter 1: Geographic Focus**
@@ -284,7 +332,7 @@ quality_reviewers = users.filter(
 
 **Architecture: Data Lake + Data Warehouse**
 ```mermaid
-graph TB
+graph LR
     subgraph "Data Lake - AWS S3"
         A[S3 Bucket: dinelike-raw<br/>Raw JSON files<br/>10GB unprocessed]
         B[S3 Bucket: dinelike-processed<br/>Parquet files<br/>111MB compressed]
@@ -304,11 +352,11 @@ graph TB
     B -->|Triggers| D
     D -->|Loads tagged data| E
     
-    style A fill:#FF9900
-    style B fill:#FF9900
-    style C fill:#FF9900
-    style D fill:#FF9900
-    style E fill:#00b894
+    style A fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
+    style B fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
+    style C fill:#FFCCBC,stroke:#FFAB91,stroke-width:2px
+    style D fill:#E1BEE7,stroke:#CE93D8,stroke-width:2px
+    style E fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
 ```
 
 **Why This Architecture?**
@@ -417,43 +465,7 @@ We can't just look at star ratings. Two people might both love Italian food, but
    - "budget", "moderate", "premium"
 
 **How We Extracted Tags: LLM Analysis**
-```python
-# lambda/llm_tagger.py
-import anthropic
 
-def analyze_reviewer(user_id, reviews):
-    """
-    Analyze a reviewer's 150+ reviews to extract preference tags.
-    """
-    # Aggregate their reviews
-    review_text = "\n".join([r['text'] for r in reviews])
-    
-    # Prompt the LLM
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
-        messages=[{
-            "role": "user",
-            "content": f"""
-            Analyze these restaurant reviews and extract structured preference tags.
-            
-            Reviews:
-            {review_text}
-            
-            Return JSON with these exact fields:
-            - cuisines: array of cuisine types mentioned
-            - priorities: array of what they value (food_quality, service, atmosphere, value)
-            - dining_style: array of occasions (casual, fine_dining, romantic, family)
-            - meal_timing: array of when they dine (breakfast, lunch, dinner)
-            - adventure_level: string (conservative/moderate/adventurous)
-            - price_sensitivity: string (budget/moderate/premium)
-            """
-        }]
-    )
-    
-    tags = json.loads(response.content[0].text)
-    return tags
-```
 
 **Example LLM Input/Output:**
 
@@ -485,18 +497,19 @@ def analyze_reviewer(user_id, reviews):
 
 **Processing Pipeline:**
 ```mermaid
-sequenceDiagram
-    participant S3 as S3 Processed Bucket
-    participant Lambda as LLM Tagger Lambda
-    participant LLM as Claude API
-    participant PG as PostgreSQL
+graph LR
+    S3[S3 Processed Bucket] --> Lambda[LLM Tagger Lambda]
+    Lambda --> LLM[OpenAI GPT-4<br/>Analyze patterns]
+    LLM --> Tags[Extract 6D Tags]
+    Tags --> PG[(PostgreSQL<br/>Store JSONB)]
+    Tags --> S3Out[S3: reviewer_profiles_llm.parquet]
     
-    S3->>Lambda: New reviewer data uploaded
-    Lambda->>Lambda: Fetch reviewer's 150+ reviews
-    Lambda->>LLM: Analyze review patterns
-    LLM->>Lambda: Return structured tags
-    Lambda->>PG: Store tags in JSONB column
-    Lambda->>S3: Save to reviewer_profiles_llm.parquet
+    style S3 fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
+    style Lambda fill:#E1BEE7,stroke:#CE93D8,stroke-width:2px
+    style LLM fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
+    style Tags fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style PG fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style S3Out fill:#FFE0B2,stroke:#FFCC80,stroke-width:2px
 ```
 
 **Cost Analysis:**
@@ -519,41 +532,15 @@ sequenceDiagram
 
 **What We Store in PostgreSQL:**
 ```mermaid
-erDiagram
-    USERS ||--o{ REVIEWS : "wrote"
-    BUSINESSES ||--o{ REVIEWS : "about"
-    USERS ||--o{ QUIZ_SUBMISSIONS : "matched_to"
+graph LR
+    USERS[USERS<br/>user_id, name<br/>review_count<br/>tags JSONB] --> REVIEWS[REVIEWS<br/>review_id<br/>user_id, business_id<br/>stars, text]
+    BUSINESSES[BUSINESSES<br/>business_id, name<br/>city, stars<br/>review_count] --> REVIEWS
+    USERS --> QUIZ[QUIZ_SUBMISSIONS<br/>submission_id<br/>display_name<br/>tags JSONB<br/>top_twin_user_id<br/>match_score]
     
-    USERS {
-        string user_id PK
-        string name
-        int review_count
-        jsonb tags "LLM-generated preferences"
-    }
-    
-    BUSINESSES {
-        string business_id PK
-        string name
-        string city
-        decimal stars
-        int review_count
-    }
-    
-    REVIEWS {
-        string review_id PK
-        string user_id FK
-        string business_id FK
-        int stars
-        text text
-    }
-    
-    QUIZ_SUBMISSIONS {
-        int submission_id PK
-        string display_name
-        jsonb tags "User's quiz answers"
-        string top_twin_user_id FK
-        decimal match_score
-    }
+    style USERS fill:#BBDEFB,stroke:#90CAF9,stroke-width:2px
+    style BUSINESSES fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style REVIEWS fill:#FFF9C4,stroke:#FFF59D,stroke-width:2px
+    style QUIZ fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
 ```
 
 **Schema Design Decisions:**
@@ -598,32 +585,6 @@ ON quiz_submissions(created_at DESC);
 - Get top restaurants in city: <100ms
 - Fetch latest quiz results: <10ms
 
-**Data Loading Process:**
-```python
-# src/services/init_db.py
-def load_data_from_parquet():
-    """
-    Load processed parquet files from S3/local into PostgreSQL.
-    Runs once on startup.
-    """
-    # 1. Load businesses (3,829 records)
-    df_businesses = pd.read_parquet('data/final/businesses_final.parquet')
-    df_businesses.to_sql('businesses', conn, if_exists='replace')
-    
-    # 2. Load users with tags (10,263 records)
-    df_users = pd.read_parquet('data/final/users_final.parquet')
-    df_tags = pd.read_parquet('data/final/reviewer_profiles_llm.parquet')
-    df_users = df_users.merge(df_tags, on='user_id')
-    df_users.to_sql('users', conn, if_exists='replace')
-    
-    # 3. Load reviews (42,687 records)
-    df_reviews = pd.read_parquet('data/final/reviews_final.parquet')
-    df_reviews.to_sql('reviews', conn, if_exists='replace')
-    
-    print("✓ Database ready for queries")
-```
-
-**Startup Time:** ~30 seconds to load 111MB
 
 **Summary: Data Architecture**
 ```
@@ -645,45 +606,29 @@ LLM Tagging → Tagged Data (Parquet) → PostgreSQL (Live Queries)
 Now that we have 10,263 reviewers with structured preference tags, how do we find your "Taste Twin"?
 
 ### The Core Algorithm
-```python
-# src/matching/matcher.py
-
-def calculate_match_score(user_tags: dict, reviewer_tags: dict) -> float:
-    """
-    Calculate similarity between user and reviewer across 6 dimensions.
+```
+FUNCTION calculate_match_score(user_tags, reviewer_tags):
     
-    Returns: Match score 0-100 (higher = better match)
-    """
-    
-    # Dimension weights (must sum to 1.0)
+    // Define importance weights (total = 100%)
     weights = {
-        'cuisines': 0.30,           # Most important
-        'priorities': 0.25,
-        'dining_style': 0.20,
-        'meal_timing': 0.10,
-        'adventure_level': 0.10,
-        'price_sensitivity': 0.05   # Least important
+        cuisines: 30%,
+        priorities: 25%, 
+        dining_style: 20%,
+        meal_timing: 10%,
+        adventure_level: 10%,
+        price_sensitivity: 5%
     }
     
-    total_score = 0
+    score = 0
     
-    for dimension, weight in weights.items():
-        # Get preference lists for this dimension
-        user_prefs = set(user_tags.get(dimension, []))
-        reviewer_prefs = set(reviewer_tags.get(dimension, []))
+    FOR EACH dimension IN weights:
+        // Calculate Jaccard Index (overlap between two sets)
+        overlap = (common preferences) / (total unique preferences)
         
-        # Calculate Jaccard similarity (intersection / union)
-        if user_prefs and reviewer_prefs:
-            intersection = len(user_prefs & reviewer_prefs)
-            union = len(user_prefs | reviewer_prefs)
-            similarity = intersection / union
-        else:
-            similarity = 0
-        
-        # Weight this dimension's contribution
-        total_score += similarity * weight * 100
+        // Add weighted contribution to total score
+        score += overlap × weight × 100
     
-    return round(total_score, 2)
+    RETURN score (0-100)
 ```
 
 ### Why Jaccard Similarity?
@@ -812,281 +757,65 @@ def find_best_match(user_tags: dict) -> tuple:
 1. **Explainable:** Users understand why they matched
 2. **Tunable:** Can adjust dimension weights based on feedback
 3. **Fast:** No ML inference needed, pure math
-4. **Accurate:** 87%+ user satisfaction in testing
-
----
-
-## Complete User Journey
-
-Let's walk through the ENTIRE flow from quiz submission to seeing recommendations:
-
-### Step-by-Step Flow
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant Kafka
-    participant Consumer
-    participant Algorithm
-    participant DB
-    
-    User->>Frontend: 1. Fill out quiz
-    Note over User,Frontend: Select preferences in 6 categories
-    
-    Frontend->>API: 2. POST /api/quiz/submit
-    Note over Frontend,API: {"tags": {...}, "name": "John"}
-    
-    API->>Kafka: 3. Publish to queue
-    Note over API,Kafka: Event: quiz_submission
-    
-    API-->>Frontend: 4. 200 OK (instant)
-    Note over API,Frontend: {"submission_id": 123}
-    
-    Frontend-->>User: 5. "Finding your twin..."
-    
-    Kafka->>Consumer: 6. New event available
-    Consumer->>Algorithm: 7. Match user
-    
-    loop For each of 10,263 reviewers
-        Algorithm->>Algorithm: Calculate score
-    end
-    
-    Algorithm-->>Consumer: 8. Best match: Sarah M. (87.5 score)
-    
-    Consumer->>DB: 9. Get Sarah's reviews
-    DB-->>Consumer: 10. Return restaurants
-    
-    Consumer->>DB: 11. Save results
-    
-    Frontend->>API: 12. Poll for results
-    API->>DB: 13. Query results
-    DB-->>API: 14. Return match
-    API-->>Frontend: 15. Send data
-    
-    Frontend-->>User: 16. Display twin + restaurants!
-```
-
-### Detailed Walkthrough
-
-**Step 1: User Takes Quiz**
-```javascript
-// Frontend: React component
-function QuizForm() {
-  const [tags, setTags] = useState({
-    cuisines: [],
-    priorities: [],
-    dining_style: [],
-    meal_timing: [],
-    adventure_level: "",
-    price_sensitivity: ""
-  });
-  
-  // User checks boxes, selects options
-  // Each selection updates tags state
-}
-```
-
-**Step 2-4: API Receives & Queues**
-```python
-# API: FastAPI endpoint
-@app.post("/api/quiz/submit")
-async def submit_quiz(quiz: QuizSubmission):
-    # Validate input (Pydantic does this automatically)
-    if not quiz.tags or not quiz.display_name:
-        raise HTTPException(400, "Missing required fields")
-    
-    # Publish to Kafka (non-blocking, returns instantly)
-    await kafka_producer.send(
-        topic='quiz_submissions',
-        value=quiz.dict()
-    )
-    
-    # Respond immediately (don't wait for matching)
-    return {
-        "submission_id": generate_id(),
-        "status": "processing",
-        "message": "Finding your Taste Twin..."
-    }
-    # Total time: <10ms
-```
-
-**Why Kafka?**
-- API responds instantly (good UX)
-- Matching happens in background (CPU-intensive)
-- If server crashes, quiz stays in queue (reliable)
-- Can handle traffic spikes (queues buffer requests)
-
-**Step 5-8: Background Matching**
-```python
-# Consumer: Kafka consumer service
-def process_quiz(quiz_data):
-    user_tags = quiz_data['tags']
-    
-    # Fetch all reviewers (10,263 records)
-    reviewers = db.query("""
-        SELECT user_id, name, tags 
-        FROM users
-    """)
-    
-    # Find best match
-    best_match = None
-    highest_score = 0
-    
-    for reviewer in reviewers:
-        score = calculate_match_score(user_tags, reviewer['tags'])
-        if score > highest_score:
-            highest_score = score
-            best_match = reviewer
-    
-    # Score: 87.5 (great match!)
-    return best_match, highest_score
-```
-
-**Step 9-10: Get Recommendations**
-```python
-# Get twin's favorite restaurants
-restaurants = db.query("""
-    SELECT 
-        b.name,
-        b.city,
-        b.stars,
-        r.stars as twin_rating,
-        r.text as twin_review
-    FROM businesses b
-    JOIN reviews r ON b.business_id = r.business_id
-    WHERE r.user_id = %s  -- Sarah's user_id
-      AND r.stars >= 4    -- Only 4-5 star reviews
-      AND b.city = %s     -- Same city as user
-    ORDER BY r.stars DESC, b.review_count DESC
-    LIMIT 5
-""", (best_match['user_id'], quiz_data['city']))
-```
-
-**Step 11: Save Results**
-```python
-# Store in database for later retrieval
-db.execute("""
-    INSERT INTO quiz_submissions 
-    (display_name, tags, top_twin_user_id, top_twin_name, match_score)
-    VALUES (%s, %s, %s, %s, %s)
-""", (
-    quiz_data['display_name'],
-    quiz_data['tags'],
-    best_match['user_id'],
-    best_match['name'],
-    highest_score
-))
-```
-
-**Step 12-16: Display Results**
-```javascript
-// Frontend: Poll for results
-useEffect(() => {
-  const interval = setInterval(async () => {
-    const response = await fetch('/api/results/latest');
-    const data = await response.json();
-    
-    if (data.length > 0) {
-      setResults(data[0]);
-      clearInterval(interval);
-    }
-  }, 2000);  // Check every 2 seconds
-}, []);
-
-// Display
-<div>
-  <h2>Your Taste Twin: {results.top_twin_name}</h2>
-  <p>Match Score: {results.match_score}%</p>
-  
-  <h3>Recommended Restaurants:</h3>
-  {results.recommendations.map(restaurant => (
-    <RestaurantCard 
-      name={restaurant.name}
-      rating={restaurant.stars}
-      twinReview={restaurant.twin_review}
-    />
-  ))}
-</div>
-```
-
-### End-to-End Timing
-
-| Step | Time | Notes |
-|------|------|-------|
-| Quiz submission | <10ms | API responds instantly |
-| Kafka delivery | <5ms | Message queued |
-| Matching algorithm | ~100ms | 10K comparisons |
-| Database queries | ~50ms | Get restaurants |
-| Save results | ~10ms | Insert to DB |
-| Frontend polling | 2s | User-friendly delay |
-| **Total** | **~3s** | From submit to results |
+4. **Accurate:** High user satisfaction in testing
 
 ---
 
 ## System Architecture
 
-### Complete Technical Architecture
+### Complete Technical Stack
+
 ```mermaid
-graph TB
-    subgraph "User Interface Layer"
-        UI[React Frontend<br/>localhost:5173<br/>Quiz & Results Display]
+graph LR
+    subgraph "Frontend"
+        UI[React<br/>localhost:5173]
     end
     
-    subgraph "API Layer - FastAPI"
-        API[FastAPI Backend<br/>localhost:8000<br/>Async Endpoints]
-        Health[Health Checks]
+    subgraph "Backend"
+        API[FastAPI<br/>localhost:8000]
     end
     
-    subgraph "Message Queue - Apache Kafka"
-        Kafka[Kafka Broker<br/>Topic: quiz_submissions]
-        Zoo[Zookeeper<br/>Coordination]
+    subgraph "Message Queue"
+        Kafka[Kafka<br/>quiz_submissions topic]
+        Zoo[Zookeeper]
     end
     
-    subgraph "Processing Layer"
-        Consumer[Kafka Consumer<br/>Background Worker]
-        Matcher[Matching Algorithm<br/>6D Comparison]
+    subgraph "Processing"
+        Consumer[Kafka Consumer<br/>Matching worker]
+        Airflow[Airflow<br/>Daily DAG]
     end
     
-    subgraph "Data Storage"
-        PG[(PostgreSQL<br/>10K reviewers<br/>42K reviews)]
+    subgraph "Storage"
+        PG[(PostgreSQL<br/>Reviewers + Results)]
     end
     
-    subgraph "Cloud Layer - AWS"
-        S3Raw[S3: Raw Data<br/>10GB JSON]
-        S3Proc[S3: Processed<br/>111MB Parquet]
-        Lambda1[Lambda: Filter]
-        Lambda2[Lambda: LLM Tagger]
-    end
+    UI --> API
+    API --> Kafka
+    Kafka --> Consumer
+    Consumer --> PG
+    API --> PG
+    Airflow --> PG
+    Zoo -.-> Kafka
     
-    subgraph "Orchestration"
-        Airflow[Airflow<br/>Daily Stats DAG]
-    end
-    
-    UI -->|Submit Quiz| API
-    API -->|Publish| Kafka
-    Kafka -->|Consume| Consumer
-    Consumer -->|Match| Matcher
-    Matcher -->|Query| PG
-    Consumer -->|Save| PG
-    API -->|Query| PG
-    
-    S3Raw -->|Trigger| Lambda1
-    Lambda1 -->|Save| S3Proc
-    S3Proc -->|Trigger| Lambda2
-    Lambda2 -->|Load| PG
-    
-    Airflow -->|Daily Jobs| PG
-    
-    Zoo -.->|Manage| Kafka
-    
-    style UI fill:#e1f5ff
-    style API fill:#fff3cd
-    style Kafka fill:#f8d7da
-    style PG fill:#d4edda
-    style S3Raw fill:#FF9900
-    style S3Proc fill:#FF9900
+    style UI fill:#BBDEFB,stroke:#90CAF9,stroke-width:2px
+    style API fill:#FFF9C4,stroke:#FFF59D,stroke-width:2px
+    style Kafka fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
+    style Zoo fill:#E1BEE7,stroke:#CE93D8,stroke-width:2px
+    style Consumer fill:#FFCCBC,stroke:#FFAB91,stroke-width:2px
+    style Airflow fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style PG fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
 ```
+
+**Architecture Decisions:**
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Message Queue** | Apache Kafka | Decouple API from heavy processing, ensure reliable delivery |
+| **Real-Time Processing** | Kafka Consumer | Run matching algorithm asynchronously |
+| **Batch Processing** | Apache Airflow | Automated daily statistics and data cleanup |
+| **API** | FastAPI | Handle HTTP requests, async operations |
+| **Database** | PostgreSQL | Store reviewers, reviews, quiz results, analytics |
+| **Frontend** | React | User interface for quiz and results |
 
 ### Technology Stack
 
@@ -1094,185 +823,329 @@ graph TB
 |-------|-----------|-----------------|
 | **Frontend** | React 18 | Component-based, widely used, great ecosystem |
 | **API** | FastAPI | Async Python, auto-generated docs, fast |
-| **Message Queue** | Apache Kafka | Industry standard, reliable, scalable |
+| **Message Queue** | Apache Kafka | Industry standard, reliable, handles spikes |
+| **Batch Processing** | Apache Airflow | Scheduled jobs, dependency management, monitoring |
 | **Database** | PostgreSQL 15 | ACID, JSONB support, mature, reliable |
 | **Cloud Storage** | AWS S3 | Cheap, durable (99.999999999%), scalable |
 | **Serverless** | AWS Lambda | Event-driven, auto-scaling, cost-effective |
-| **Orchestration** | Apache Airflow | DAG visualization, scheduling, monitoring |
 | **Containerization** | Docker Compose | One-command deployment, reproducible |
 | **CI/CD** | GitHub Actions | Free, integrated with repo, simple YAML |
 | **Data Processing** | Polars | 10x faster than Pandas, handles big data |
 | **File Format** | Parquet | Columnar, compressed, query-optimized |
 
-### Deployment Architecture
+### Real-Time Processing: Kafka
 
-**Local Development:**
-```
-docker-compose up -d
-→ 7 containers start
-→ Data loads from data/final/
-→ Ready in 60 seconds
+When a user submits a quiz, they shouldn't have to wait for the matching algorithm to compare against 10,000+ reviewers. Kafka enables us to process this work asynchronously.
+
+**The Flow:**
+
+```mermaid
+graph LR
+    User[User submits quiz] --> API[FastAPI<br/>POST /quiz/submit]
+    API -->|Publish| Kafka[Kafka Queue<br/>quiz_submissions topic]
+    Kafka -->|Consume| Consumer[Kafka Consumer<br/>Background worker]
+    Consumer -->|Run matching| Match[Matching Algorithm<br/>Compare vs 10K reviewers]
+    Match -->|Save| DB[(PostgreSQL<br/>Store results)]
+    Frontend[Frontend<br/>Polls every 2s] -->|Query| DB
+    DB -->|Return| Display[Display results]
+    
+    style API fill:#FFF9C4,stroke:#FFF59D,stroke-width:2px
+    style Kafka fill:#F8BBD0,stroke:#F48FB1,stroke-width:2px
+    style Consumer fill:#E1BEE7,stroke:#CE93D8,stroke-width:2px
+    style Match fill:#FFCCBC,stroke:#FFAB91,stroke-width:2px
+    style DB fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
 ```
 
-**Production (AWS):**
+**Why We Used Kafka:**
+
+1. **Decoupling**: API doesn't wait for matching (instant response to user)
+2. **Reliability**: If consumer crashes, quiz stays in queue
+3. **Asynchronous Processing**: Heavy computation happens in background
+
+**What Happens:**
+
+- API receives quiz → publishes to Kafka (10ms) → returns "Finding your twin..."
+- Consumer picks up message → runs matching algorithm (100ms) → saves to database
+- Frontend polls for results every 2 seconds → displays when ready
+- Total time: ~3 seconds from submission to results
+
+### Batch Processing: Airflow
+
+While Kafka handles real-time quiz processing, Airflow manages scheduled maintenance and analytics that run independently of user activity.
+
+![Airflow-dag](/documentation/dag_airflow.png)
+*Screenshot from Airflow*
+
+**The Daily Statistics DAG:**
+
+```mermaid
+graph LR
+    Schedule[Scheduled: Daily at 2 AM] --> T1[Query quiz submissions<br/>from PostgreSQL]
+    T1 --> T2[Calculate statistics:<br/>Total quizzes<br/>Avg match score<br/>Popular cuisines]
+    T2 --> T3[Store analytics<br/>in database]
+    T3 --> T4[Clean up old data<br/>90+ days old]
+    
+    style Schedule fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style T1 fill:#BBDEFB,stroke:#90CAF9,stroke-width:2px
+    style T2 fill:#FFF9C4,stroke:#FFF59D,stroke-width:2px
+    style T3 fill:#C8E6C9,stroke:#A5D6A7,stroke-width:2px
+    style T4 fill:#FFCCBC,stroke:#FFAB91,stroke-width:2px
 ```
-- API: ECS Fargate (auto-scaling containers)
-- Database: RDS PostgreSQL (managed, automatic backups)
-- Kafka: MSK (managed Kafka)
-- Frontend: CloudFront + S3 (CDN)
-- Data Processing: Lambda + S3
-- Monitoring: CloudWatch
-```
+
+**Why We Used Airflow:**
+
+1. **Automated Scheduling**: Runs every day at 2 AM without manual intervention
+2. **Dependency Management**: Tasks run in correct order (can't calculate stats before querying data)
+3. **Monitoring**: Web UI shows success/failure of each task
+4. **Retry Logic**: Automatically retries failed tasks
+
+**What It Does:**
+
+- Calculates daily metrics (quiz count, average match scores, popular cuisines)
+- Stores analytics for trend analysis
+- Cleans up old quiz submissions (data retention policy)
+- Accessible via UI at `localhost:8080`
+
+### How Kafka and Airflow Work Together
+
+These two systems handle different types of workloads and never interfere with each other:
+
+| Aspect | Kafka (Real-Time) | Airflow (Batch) |
+|--------|-------------------|-----------------|
+| **Trigger** | User action (quiz submit) | Schedule (daily at 2 AM) |
+| **Latency** | Milliseconds | Minutes |
+| **Purpose** | Process individual quizzes | Aggregate analytics, cleanup |
+| **Failure Impact** | One user waits longer | Stats delayed until retry |
+
+This separation ensures that a spike in quiz submissions doesn't affect analytics jobs, and a long-running batch job doesn't slow down real-time matching.
+
+### End-to-End Timing
+
+| Step | Time | Component |
+|------|------|-----------|
+| Quiz submission | <10ms | API → Kafka |
+| Queue delivery | <5ms | Kafka persistence |
+| Matching | ~100ms | Consumer processing |
+| Database save | ~10ms | PostgreSQL insert |
+| Frontend poll | 2s | User experience |
+| **Total** | **~3s** | Complete flow |
+
+**Daily Batch Job (Airflow):**
+
+- Runs at 2 AM every day
+- Takes ~30 seconds total
+- Calculates statistics and cleans old data
 
 ---
 
 ## Testing & CI/CD
 
-### Test Pyramid
-```mermaid
-graph TD
-    A[1 E2E Test<br/>Full System] --> B[21 Integration Tests<br/>API + Database]
-    B --> C[15 Unit Tests<br/>Matching Algorithm]
-    
-    style A fill:#f8d7da
-    style B fill:#fff3cd
-    style C fill:#d4edda
+### Test Suite Overview
+
+We maintain a comprehensive test suite with 36 tests across three levels:
+
+| Test Type | Count | Purpose |
+|-----------|-------|---------|
+| **Unit Tests** | 15 | Test matching algorithm logic in isolation |
+| **Integration Tests** | 21 | Test API endpoints, database queries, Kafka messaging |
+| **End-to-End Tests** | 1 | Full pipeline: quiz submission → Kafka → matching → database |
+
+**Test Structure:**
 ```
-
-**36 Total Tests**
-
-**Unit Tests (15 tests, 49% coverage)**
-- Matching algorithm correctness
-- Edge cases (empty tags, missing dimensions)
-- Score calculation accuracy
-
-**Integration Tests (21 tests)**
-- API endpoints (POST /quiz/submit)
-- Database operations (INSERT, SELECT)
-- Kafka produce/consume
-- Full request/response cycles
-
-**E2E Test (1 comprehensive test)**
-- Start all containers
-- Load 111MB data
-- Submit real quiz
-- Verify Kafka processing
-- Check database storage
+tests/
+├── unit/                  # 15 tests - matching algorithm, score calculation
+├── integration/           # 21 tests - API routes, database operations
+└── e2e/                   # 1 test - complete user flow
+```                
 
 ### CI/CD Pipeline
 
-**Every commit triggers:**
-```mermaid
-graph LR
-    A[git push] --> B[Unit Tests]
-    B --> C[Docker Build]
-    C --> D[E2E Test]
-    D --> E[Code Quality]
-    E --> F[✅ Deploy Ready]
-    
-    style F fill:#d4edda
-```
+Every push to `main` or `develop` triggers our GitHub Actions pipeline with 4 parallel jobs:
 
-**.github/workflows/ci.yml**
+![CI/CD Pipeline](/documentation/CI_CD.png)
+*GitHub Actions workflow showing all jobs passing*
+
+**Pipeline Jobs:**
+
+| Job | Duration | What It Does |
+|-----|----------|--------------|
+| **Unit Tests** | ~32s | Runs pytest on matching algorithm with coverage reporting |
+| **Docker Build Validation** | ~49s | Builds API and Consumer images to catch build errors |
+| **Code Quality** | ~11s | Runs flake8 linting for code standards |
+| **Complete E2E Test** | ~3m 4s | Spins up entire stack and runs full integration test |
+
+**E2E Test Flow:**
+
+The end-to-end test validates the entire pipeline works correctly:
+
+1. **Start Infrastructure** - PostgreSQL, Kafka, Zookeeper
+2. **Load Data** - 10,263 users, 3,829 businesses, 42,687 reviews
+3. **Start Services** - API and Kafka Consumer
+4. **Submit Real Quiz** - POST request with test preferences
+5. **Verify Kafka Processing** - Consumer picks up and processes message
+6. **Check Database** - Results saved correctly to PostgreSQL
 ```yaml
-jobs:
-  unit-tests:
-    - Install dependencies
-    - Run pytest with coverage
-    - 15 tests must pass
-  
-  docker-build:
-    - Build API image
-    - Build Consumer image
-    - Validate compose config
-  
-  full-e2e-test:
-    - Start PostgreSQL
-    - Load 111MB data
-    - Start Kafka + API + Consumer
-    - Submit test quiz
-    - Verify in database
-    - Check API endpoints
-  
-  lint:
-    - Run flake8
-    - Check code style
+# Key E2E test step from ci.yml
+- name: Submit a real quiz (THE BIG TEST!)
+  run: |
+    curl -X POST http://localhost:8000/api/quiz/submit \
+      -H "Content-Type: application/json" \
+      -d '{
+        "display_name": "CI Test User",
+        "tags": {
+          "cuisines": ["italian", "mexican"],
+          "priorities": ["food_quality", "atmosphere"],
+          "dining_style": ["casual", "cozy"],
+          "meal_timing": ["dinner"],
+          "adventure_level": "moderate",
+          "price_sensitivity": "moderate"
+        }
+      }'
 ```
 
-**Badge:** [![CI/CD](https://github.com/Vihaan8/final_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Vihaan8/final_project/actions/workflows/ci.yml)
+**Why This Pipeline Matters:**
+
+- **Catches Breaking Changes Early** - Docker build fails? We know before merging.
+- **Validates Full Integration** - Not just unit tests, but real Kafka → Database flow.
+- **Reproducible** - Anyone can clone and run with zero configuration.
+- **Fast Feedback** - Total pipeline time: ~4 minutes.
 
 ---
 
-## Undercurrents of Data Engineering
+## Complete User Journey
+
+### User Interface Screenshots
+
+**Step 1: Take the Quiz**
+
+![Quiz Interface - Cuisines](/documentation/platform_photos/quiz-1.png)
+*Select your favorite cuisines from 12 options*
+
+![Quiz Interface - Adventure Level](/documentation/platform_photos/quiz-2.png)
+*Choose your food adventure level*
+
+**Step 2: See Your Results**
+
+![Results Page - Your Twin](/documentation/platform_photos/recommendations.png)
+*Meet your taste twin and see your match score*
+
+![Restaurant Recommendations](/documentation/platform_photos/recs.png)
+*Get personalized restaurant recommendations based on your twin's favorites*
+
+**Step 3: Explore the Community**
+
+![Community Feed](/documentation/platform_photos/friends.png)
+*See what other users are discovering - live feed of recent matches*
+
+---
+
+## Data Engineering Undercurrents
+
+This section explains how our project demonstrates the key principles of data engineering.
 
 ### 1. Scalability
 
-**Horizontal Scaling:**
+Our architecture scales horizontally at multiple levels:
 ```bash
-# Add more Kafka consumers
+# Scale Kafka consumers during peak hours
 docker-compose up -d --scale consumer=3
+
+# Airflow handles batch workloads without affecting real-time
 ```
 
-**Evidence:** CI/CD simulates 1000+ concurrent requests
+- **Kafka** allows adding more consumers to handle increased quiz submissions
+- **PostgreSQL** with proper indexing handles growing data volumes
+- **S3** storage scales infinitely for raw data retention
 
 ### 2. Modularity
 
-**Separation of Concerns:**
-- API: Handle HTTP requests
-- Consumer: Heavy computation
-- Database: Persistent storage
-- Frontend: User experience
+Each component is self-contained and can be developed, tested, and deployed independently:
 
-**Evidence:** Each service can be developed/tested independently
+| Module | Responsibility | Can Change Without Affecting |
+|--------|---------------|------------------------------|
+| `src/api/` | HTTP request handling | Matching algorithm, frontend |
+| `src/matching/` | Taste twin algorithm | API routes, database schema |
+| `src/services/kafka_consumer.py` | Message processing | API, frontend |
+| `frontend/` | User interface | All backend components |
+| `airflow/dags/` | Batch jobs | Real-time processing |
+
+**Example:** We can swap the matching algorithm from Jaccard to cosine similarity by only modifying `matcher.py` — no other code changes required.
 
 ### 3. Reusability
 
-**Shared Components:**
-```python
-from src.matching.matcher import calculate_match_score
+Components are designed for reuse across the project and beyond:
 
-# Used in: API, consumer, CLI, tests
-score = calculate_match_score(user_tags, reviewer_tags)
-```
+- **Matching Algorithm** (`matcher.py`) - Generic 6-dimensional similarity function, reusable for any tag-based matching
+- **Database Schema** - JSONB tags pattern applicable to any preference-matching system
+- **Docker Compose Setup** - Template for any FastAPI + Kafka + PostgreSQL project
+- **CI/CD Pipeline** - Reusable workflow for Python projects with Docker
 
 ### 4. Observability
 
-**Monitoring:**
-- Health endpoints: `/health`
-- Docker logs: `docker-compose logs api`
-- Airflow UI: Task execution history
+Multiple layers of visibility into system health and behavior:
+
+- **Kafka Consumer Logs:** `docker-compose logs consumer` - See every quiz processed
+- **Airflow UI:** `localhost:8080` - Visual DAG execution history, task timing, failure alerts
+- **API Health Endpoints:** `/health` returns service status
+- **PostgreSQL Query Logging:** Track slow queries and optimization opportunities
+```bash
+# Example: Monitor consumer processing in real-time
+docker-compose logs -f consumer
+
+# Output:
+# INFO: Received quiz from user "John D."
+# INFO: Best match: Sarah M. (score: 78.5)
+# INFO: Saved to database in 12ms
+```
 
 ### 5. Data Governance
 
-**Schema Validation:**
-```sql
-CREATE TABLE quiz_submissions (
-    match_score DECIMAL(5,2) 
-    CHECK (match_score >= 0 AND match_score <= 100)
-);
-```
+We implement data governance through clear policies and controls:
+
+- **Data Retention:** Airflow DAG automatically cleans quiz submissions older than 90 days
+- **Schema Enforcement:** PostgreSQL constraints ensure data integrity
+- **Data Lineage:** Clear pipeline from raw S3 → processed S3 → PostgreSQL, documented in architecture diagrams
+- **Access Control:** Database credentials managed via environment variables, not hardcoded
 
 ### 6. Reliability
 
-**Fault Tolerance:**
-- Kafka message persistence
-- Database ACID transactions
-- Docker auto-restart policies
+The system is designed to handle failures gracefully:
+
+- **Kafka Persistence:** Quiz submissions are never lost — if consumer crashes, messages wait in queue
+- **Airflow Retry Logic:** Failed tasks automatically retry with exponential backoff
+- **Docker Restart Policies:** Services auto-restart on crash (`restart: on-failure`)
+- **Health Checks:** PostgreSQL and API containers have built-in health checks
+```yaml
+# From docker-compose.yml - PostgreSQL health check
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U dinelike"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+```
 
 ### 7. Efficiency
 
-**Optimizations:**
-- Parquet: 70% smaller than CSV
-- Database indexes: <100ms queries
-- Async API: Non-blocking requests
+Optimized for performance at every layer:
+
+| Optimization | Impact |
+|--------------|--------|
+| **Polars over Pandas** | 10x faster data filtering (45s vs 8min) |
+| **Parquet format** | 90% compression vs JSON (10GB → 111MB) |
+| **GIN indexes on JSONB** | <10ms queries on nested JSON tags |
+| **Async FastAPI** | Non-blocking API requests |
+| **Kafka async processing** | Users don't wait for matching (~3s total) |
 
 ### 8. Security
 
-**Best Practices:**
-- Environment variables for credentials
-- No hardcoded passwords
-- Parameterized SQL queries
-- Input validation (Pydantic)
+Security measures implemented throughout the stack:
+
+- **No Hardcoded Credentials:** All secrets via environment variables and `.env` files
+- **Database Isolation:** PostgreSQL runs in isolated Docker network, only API can connect
+- **Input Validation:** FastAPI Pydantic models validate all quiz submissions
+- **Read-Only Volumes:** Source code mounted as read-only in containers (`:ro`)
+- **Minimal Container Images:** Using slim Python images to reduce attack surface
+- **Environment Variable Management:** Credentials never in code - loaded from environment
 
 ---
 
@@ -1280,21 +1153,11 @@ CREATE TABLE quiz_submissions (
 
 | Team Member | Contributions |
 |-------------|---------------|
-| **Vihaan Manchanda** | Data pipeline architecture, matching algorithm, PostgreSQL schema, CI/CD, backend API, documentation |
-| **Anvita Suresh** | Polars data analysis, filtering strategy, quality assurance, testing, data validation |
-| **Tea Tafaj** | React frontend, UI/UX design, component architecture, API integration, responsive design |
-| **Arushi Singh** | Kafka integration, consumer service, Airflow DAG, LLM tagging coordination, system documentation |
+| **Vihaan Manchanda** | Data pipeline architecture (Data Lake + Data Warehouse), Kafka integration, Backend APIs, Containerization through Docker |
+| **Anvita Suresh** | Matching algorithm, Airflow DAG, CI/CD, Quality Assurance|
+| **Tea Tafaj** | EDA, React frontend, UI/UX design|
+| **Arushi Singh** | Testing, Documentation |
 
 All members contributed to code reviews, debugging, testing, and documentation.
 
 ---
-
-<div align="center">
-
-**Built with ❤️ by Team DineLike**
-
-[GitHub Repository](https://github.com/Vihaan8/final_project) • [Report Issues](https://github.com/Vihaan8/final_project/issues)
-
-*Find your Taste Twin. Discover great restaurants. One quiz at a time.*
-
-</div>
