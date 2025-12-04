@@ -242,6 +242,103 @@ docker-compose down -v    # Stop and delete data
 - 8GB RAM
 - 5GB disk space
 
+
+---
+## Troubleshooting Setup
+
+<details>
+<summary><strong>🚨 Running into issues? (Quiz not submitting, services not starting, port conflicts)</strong></summary>
+
+### Common First-Time Setup Issues
+
+If you're experiencing any of these problems:
+- Quiz submission hangs or fails
+- "Port already in use" errors
+- Database connection errors
+- Kafka consumer not processing messages
+- Frontend can't connect to API
+
+**This usually happens because:**
+- Previous Docker containers didn't shut down cleanly
+- Stale data volumes have corrupted or outdated data
+- Ports are still held by zombie processes
+- Kafka/Zookeeper state is inconsistent
+
+---
+
+### The Fix: Clean Reset
+
+**Option 1: Standard Reset (Try This First)**
+
+```bash
+docker-compose down -v --remove-orphans
+docker-compose up -d
+```
+
+This stops all services, removes volumes (database data), removes orphaned containers, and starts fresh.
+
+---
+
+**Option 2: If Option 1 Doesn't Work**
+
+If you're still having issues, run this command to completely wipe Docker and start fresh:
+
+```bash
+docker system prune -a --volumes -f && docker-compose up -d
+```
+
+⚠️ **Warning: This will delete:**
+- All stopped containers
+- All unused Docker images
+- All volumes (including data from other projects)
+- All build cache
+
+**Only use this if you don't have other Docker projects with important data.**
+
+---
+
+### What the Nuclear Command Does (Step by Step)
+
+If you want to understand what's happening or run it manually:
+
+```bash
+# 1. Stop all running containers
+docker stop $(docker ps -aq)
+
+# 2. Remove all containers
+docker rm $(docker ps -aq)
+
+# 3. Remove all images
+docker rmi $(docker images -q)
+
+# 4. Remove all volumes (including database data)
+docker volume rm $(docker volume ls -q)
+
+# 5. Remove all networks
+docker network prune -f
+
+# 6. Remove all build cache
+docker builder prune -a -f
+
+# 7. Verify everything is gone
+docker ps -a      # Should be empty
+docker images     # Should be empty
+docker volume ls  # Should be empty
+
+# 8. Now start fresh
+docker-compose up -d
+```
+
+---
+
+### After Reset
+
+Wait ~60 seconds for all services to initialize, then:
+- Frontend: http://localhost:5173
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+</details>
 ---
 
 ## Data Architecture
