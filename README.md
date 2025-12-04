@@ -11,7 +11,7 @@
 
 **Team:** Vihaan Manchanda • Anvita Suresh • Tea Tafaj • Arushi Singh  
 **Course:** IDS 706 - Data Engineering Systems, Duke University  
-**December 2024**
+**Video Link:** -  https://drive.google.com/file/d/1IuMpWKLTlaG_SYVf6mv48D2on8-5oEZM/view?usp=sharing
 
 </div>
 
@@ -39,6 +39,7 @@ Think of it like having a foodie friend who knows exactly what you like - except
 - [Project Structure](#project-structure)
 - [What We Built](#what-we-built)
 - [Quick Start](#quick-start)
+- [Exploratory Data Analysis](#exploratory-data-analysis)
 - [Data Architecture](#data-architecture)
 - [The Matching Algorithm](#the-matching-algorithm)
 - [System Architecture](#system-architecture)
@@ -46,6 +47,7 @@ Think of it like having a foodie friend who knows exactly what you like - except
 - [Complete User Journey](#complete-user-journey)
 - [Data Engineering Undercurrents](#data-engineering-undercurrents)
 - [Team Contributions](#team-contributions)
+- [Video Link](#video-link)
 
 ---
 
@@ -297,9 +299,7 @@ docker system prune -a --volumes -f && docker-compose up -d
 
 ---
 
-### What the Nuclear Command Does (Step by Step)
-
-If you want to understand what's happening or run it manually:
+### What the Command Does
 
 ```bash
 # 1. Stop all running containers
@@ -329,7 +329,6 @@ docker volume ls  # Should be empty
 docker-compose up -d
 ```
 
----
 
 ### After Reset
 
@@ -339,6 +338,24 @@ Wait ~60 seconds for all services to initialize, then:
 - API Docs: http://localhost:8000/docs
 
 </details>
+
+
+---
+
+## Exploratory Data Analysis
+
+Before building the pipeline, we explored the raw Yelp dataset using Polars to understand its structure and identify filtering opportunities. The dataset contains 150,346 businesses across multiple US cities, 1.9 million users, and 6.9 million reviews—far too large for our project scope.
+
+![Top Cities Analysis](/documentation/Polars_EDA_1.png)
+*Geographic distribution analysis: Santa Barbara ranked 10th in business count but showed strong review activity relative to its size*
+
+![Santa Barbara Deep Dive](/documentation/Polars_EDA_2.png)
+*Santa Barbara businesses average 4.05 stars with a healthy distribution of review counts, indicating active reviewer engagement*
+
+
+Our EDA informed two key filtering decisions: (1) focus on Santa Barbara, CA to reduce 150K businesses to 3,829 restaurants while maintaining cuisine diversity, and (2) filter to reviewers with 150+ reviews, reducing 1.9M users to 10,263 quality reviewers whose preferences could be meaningfully profiled. This reduced our working dataset from ~10GB to 111MB while preserving the data richness needed for accurate taste matching.
+
+
 ---
 
 ## Data Architecture
@@ -464,45 +481,21 @@ graph LR
 - **Benefit:** Can always re-process raw data if needed
 - **Format:** Parquet (columnar, compressed)
 
-**Example S3 Structure:**
-```
-s3://dinelike-raw/
-├── businesses/
-│   └── yelp_academic_dataset_business.json (150K records)
-├── users/
-│   └── yelp_academic_dataset_user.json (1.9M records)
-└── reviews/
-    └── yelp_academic_dataset_review.json (6.9M records)
+**S3 Screenshots:**
+![S3 buckets](/documentation/AWS_S3_All.png)
+*Our S3 raw and processed buckets*
 
-s3://dinelike-processed/
-├── businesses_sb/
-│   └── businesses_final.parquet (3.8K records, 471KB)
-├── users_quality/
-│   └── users_final.parquet (10K records, 90MB)
-└── reviews_sb/
-    └── reviews_final.parquet (42K records, 21MB)
-```
+![S3 raw bucket](/documentation/AWS_S3_Raw_Bucket.png)
+*This is inside S3 raw bucket*
 
 **Lambda Functions:**
 
-**1. process_raw_data.py**
-```python
-# Triggered when new data uploaded to S3
-def lambda_handler(event, context):
-    # Download from S3
-    bucket = event['Records'][0]['s3']['bucket']['name']
-    key = event['Records'][0]['s3']['object']['key']
-    
-    # Filter with Polars
-    df = pl.read_json(f"s3://{bucket}/{key}")
-    filtered = df.filter(
-        (pl.col("city") == "Santa Barbara") &
-        (pl.col("review_count") >= 150)
-    )
-    
-    # Upload to processed bucket
-    filtered.write_parquet(f"s3://dinelike-processed/{key}.parquet")
-```
+**1. AWS Lambda Screenshots**
+![Lambda Data Clean](/documentation/AWS_Lambda_Data_Clean.png)
+*Lambda Script that cleans and processes our data and moves it into processed folder.*
+
+![Lambda LLM Tagging](/documentation/AWS_Lambda_Mapping_AI_call.png)
+*Lambda Script that triggers LLM tagging. *
 
 **Why Lambda?**
 - **Serverless:** No server management
@@ -1256,5 +1249,11 @@ Security measures implemented throughout the stack:
 | **Arushi Singh** | Testing, Documentation |
 
 All members contributed to code reviews, debugging, testing, and documentation.
+
+---
+
+## Video Link 
+
+https://drive.google.com/file/d/1IuMpWKLTlaG_SYVf6mv48D2on8-5oEZM/view?usp=sharing
 
 ---
