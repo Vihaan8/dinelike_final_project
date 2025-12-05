@@ -4,7 +4,7 @@
 
 **Ever wish you had a friend who just *gets* your taste in restaurants?**
 
-[![CI/CD Pipeline](https://github.com/Vihaan8/final_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Vihaan8/final_project/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/Vihaan8/dinelike/actions/workflows/ci.yml/badge.svg)](https://github.com/Vihaan8/dinelike/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 ![Tests](https://img.shields.io/badge/Tests-36_Passing-success)
